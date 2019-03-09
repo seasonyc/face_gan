@@ -25,15 +25,18 @@ lambda_rec = 10 #starGAN 10, attGAN 100
 lambda_cls_gen = 1 #starGAN 1, attGAN 10
 lambda_cls_real = 1 #starGAN 1, attGAN 1
 
-batch_size = 32
-lr_decay_ratio = 0.95
-_epochs=10
-
+batch_size = 16
+learning_rate = 0.0001
+g_d_update_ratio = 1
+#lr_decay_ratio = 0.95
+epochs=10
+epochs_lr_start_decay = 10
+steps_4_log_and_lrupdate = 100
 
    
 
 class FaceGAN():
-    def __init__(self, learning_rate, generator_norm_func = InstanceNormalization, discriminator_norm_func = None, weight_decay=1e-4):
+    def __init__(self, generator_norm_func = InstanceNormalization, discriminator_norm_func = None, weight_decay=1e-4):
         self.generator_norm_func = generator_norm_func
         self.discriminator_norm_func = discriminator_norm_func
         self.weight_decay = weight_decay
@@ -42,11 +45,10 @@ class FaceGAN():
         
         self.n_critic = 5
         
-        # it's rational to set lr in train by LearningRateScheduler, but we don't require such dynamic
-        self.build_model(learning_rate)
+        self.build_model()
         
     
-    def build_model(self, learning_rate):
+    def build_model(self):
         # Build the generator and discriminator
         self.generator = self.build_generator()
         self.discriminator = self.build_discriminator()
@@ -112,7 +114,7 @@ class FaceGAN():
         #         for Generator
         #-------------------------------
 
-        # For the generator we freeze the critic's layers
+        # For the generator we freeze the discriminator's layers
         self.discriminator.trainable = False
         self.generator.trainable = True
 
@@ -184,7 +186,7 @@ class FaceGAN():
         self.generator_training_model.add_loss(generator_loss)
         '''
         
-        g_optimizer = keras.optimizers.Adam(lr=learning_rate, beta_1=0.5, epsilon=1e-08)
+        g_optimizer = keras.optimizers.Adam(lr=learning_rate * g_d_update_ratio, beta_1=0.5, epsilon=1e-08)
         self.generator_training_model.compile(optimizer=g_optimizer, loss=[generator_wasserstein_loss, rec_loss, generater_cls_loss], loss_weights=[1, lambda_rec, lambda_cls_gen])
         self.generator_training_model.summary()
         
@@ -215,14 +217,14 @@ class FaceGAN():
             print(K.int_shape(x))
         
         # residul
-        for i in range(5):
+        for i in range(6):
             x = self.res_block(x, channels, norm_func=self.generator_norm_func)
             print(K.int_shape(x))
         
         # upsample
         for i in range(2):
             channels //= 2
-            x = self.deconv_block(x, channels, norm_func=self.generator_norm_func)
+            x = self.upsampling_conv_block(x, channels, norm_func=self.generator_norm_func)
             print(K.int_shape(x))
         
         x = self.conv_block(x, 3, norm_func=self.generator_norm_func, kernel_size = 7)
@@ -268,7 +270,7 @@ class FaceGAN():
         
         return Model(input, [x_src, x_cls, x_cls_sig], name='discriminator')
 
-    def conv_block(self, x, channels, norm_func, kernel_size = 4):
+    def conv_block(self, x, channels, norm_func, kernel_size = 3):
         if norm_func:
             x = norm_func()(x)
         x = ReLU()(x) #alpha=0.2
@@ -306,7 +308,7 @@ class FaceGAN():
         return x
     
 
-    def train(self, epochs):
+    def train(self):
         x_train, train_size = dataset.load_celeba('CelebA', batch_size, part='train', consumer = 'translator')
         x_val, val_size = dataset.load_celeba('CelebA', batch_size, part='val', consumer = 'translator')
 
@@ -316,11 +318,11 @@ class FaceGAN():
         x_val_next = x_val_itr.get_next()
 
         steps_per_epoch = train_size // batch_size
+        self.lr_decay_value_d = learning_rate / (((epochs - epochs_lr_start_decay) * (steps_per_epoch // steps_4_log_and_lrupdate)) + 1)
+        self.lr_decay_value_g = learning_rate * g_d_update_ratio / (((epochs - epochs_lr_start_decay) * (steps_per_epoch // steps_4_log_and_lrupdate)) + 1)
+        
         validation_steps = val_size // batch_size
         sess = K.get_session()
-        
-        def sigmoid(x):
-            return 1. / (1. + np.exp(-x))
         
         def binary_accuracy(y_true, y_pre):
             return np.mean(np.fabs(y_true - y_pre) < 0.5) 
@@ -342,27 +344,33 @@ class FaceGAN():
 
 
                 # print log...
-                if (step+1) % 100 == 0:#(step+1) % 100 == 0:
+                if (step+1) % steps_4_log_and_lrupdate == 0:
                     et = time.time() - epoch_start_time
                     eta = et * (steps_per_epoch - step - 1) / (step + 1) 
                     et = str(datetime.timedelta(seconds=et))[:-7]
                     eta = str(datetime.timedelta(seconds=eta))[:-7]
                     
                     '''
-                    stat latest 100 itrs of losses, to make the data not too old and not too variant
+                    stat latest itrs_4_log_and_lrupdate itrs of losses, to make the data not too old and not too variant
                     '''
-                    d_loss /= 100
-                    g_loss /= (100 / self.n_critic)
+                    d_loss /= steps_4_log_and_lrupdate
+                    g_loss /= (steps_4_log_and_lrupdate / self.n_critic)
                     log = "{}/{}   - Elapsed: {}, ETA: {}  - d_loss: {:.4f} , w {:.4f} , gp {:.4f} , cls {:.4f}   , g_loss: {:.4f} , w {:.4f} , rec {:.4f} , cls {:.4f}"\
                         .format(step+1, steps_per_epoch, et, eta, d_loss[0], d_loss[1], d_loss[2], d_loss[3], g_loss[0], g_loss[1], g_loss[2], g_loss[3])
                     print(log)
                     d_loss.fill(0.)
                     g_loss.fill(0.)
                     
+                    # update learning rate
+                    if (epoch + 1) > epochs_lr_start_decay:
+                        self.update_lr(self.discriminator_training_model, self.lr_decay_value_d)
+                        self.update_lr(self.generator_training_model, self.lr_decay_value_g)
+                    
             # validate per epoch
             '''
-            g: img_acc, gen_img_cls_acc
-            d: real_validate, fake_validate, real_cls_acc
+            g: img_acc, gen_img_cls_acc, div_real_and_fake
+            d: div_real_and_fake, real_cls_acc
+            higher div_real_and_fake means better discriminator but worse generator
             use generator and discriminator, compose to get above metrics
             '''
             
@@ -371,8 +379,6 @@ class FaceGAN():
             
             img_acc = 0
             gen_cls_acc = 0
-            real_validate_acc = 0
-            fake_validate_acc = 0
             real_cls_acc = 0
             for step in range(validation_steps):
                 val_img, val_label = sess.run(x_val_next)
@@ -381,12 +387,10 @@ class FaceGAN():
                 g_val_loss += self.generator_training_model.test_on_batch([val_img, val_label, val_target_label])
                 
                 rec_img = self.generator.predict_on_batch([val_img, val_target_label])
-                r_src, _, r_cls = self.discriminator.predict_on_batch(val_img)
-                g_src, _, g_cls = self.discriminator.predict_on_batch(rec_img)
+                _, _, r_cls = self.discriminator.predict_on_batch(val_img)
+                _, _, g_cls = self.discriminator.predict_on_batch(rec_img)
                 rec_img = self.generator.predict_on_batch([val_img, val_label])
                 
-                real_validate_acc += binary_accuracy(np.ones((batch_size, 1), np.float32), sigmoid(r_src))
-                fake_validate_acc += binary_accuracy(np.zeros((batch_size, 1), np.float32), sigmoid(g_src))
                 real_cls_acc += binary_accuracy(val_label, r_cls.flatten())
                 gen_cls_acc += binary_accuracy(val_target_label, g_cls.flatten())
                 img_acc += (1 - np.mean(np.fabs(val_img.flatten() - rec_img.flatten())) / 2)
@@ -397,17 +401,16 @@ class FaceGAN():
             
             img_acc /= validation_steps
             gen_cls_acc /= validation_steps
-            real_validate_acc /= validation_steps
-            fake_validate_acc /= validation_steps
+            div_real_and_fake = -d_val_loss[1] # it's wasserstein loss of d indeed, but turn to positive in order to be easier understanding
             real_cls_acc /= validation_steps
 
             
             log = 'ephoch {}  validation:  - d_loss: {:.4f} , w {:.4f} , gp {:.4f} , cls {:.4f}   , '\
                         'g_loss: {:.4f} , w {:.4f} , rec {:.4f} , cls {:.4f}  -  '\
-                        'img_acc: {:.4f},  gen_cls_acc: {:.4f}, real_cls_acc: {:.4f}, real_acc: {:.4f}, fake_acc: {:.4f}'\
+                        'img_acc: {:.4f},  gen_cls_acc: {:.4f}, real_cls_acc: {:.4f}, div_real_and_fake: {:.4f}'\
                         .format(epoch+1, d_val_loss[0], d_val_loss[1], d_val_loss[2], d_val_loss[3], 
                                 g_val_loss[0], g_val_loss[1], g_val_loss[2], g_val_loss[3], 
-                                img_acc, gen_cls_acc, real_cls_acc, real_validate_acc, fake_validate_acc)
+                                img_acc, gen_cls_acc, real_cls_acc, div_real_and_fake)
             print(log)
             
             # save model per epoch
@@ -416,19 +419,16 @@ class FaceGAN():
             
             # test the model
             self.test_gan(epoch)
-            
-            # update learning rate
-            if (epoch+1) % 1 == 0:
-                lr = K.get_value(self.discriminator_training_model.optimizer.lr)
-                lr *= lr_decay_ratio
-                K.set_value(self.discriminator_training_model.optimizer.lr, lr)
-                K.set_value(self.generator_training_model.optimizer.lr, lr)
-                lr = K.get_value(self.discriminator_training_model.optimizer.lr)
-                print(str(lr))
-                lr = K.get_value(self.generator_training_model.optimizer.lr)
-                print(str(lr))
-                
 
+            
+                
+    def update_lr(self, model, decay):
+        lr = K.get_value(model.optimizer.lr)
+        lr -= decay
+        K.set_value(model.optimizer.lr, lr)
+        
+        lr = K.get_value(model.optimizer.lr)
+        print(str(lr))        
         
 
         
@@ -450,7 +450,43 @@ class FaceGAN():
                 print('real: ' + str(sr) + ' cls ' + str(cr) + '   fake: ' + str(sf) + ' cls ' + str(cf))
                 
 
+def test(translator, discriminator):
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/trump.jpg', 0)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/201207.jpg', 1)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/202016.jpg', 0)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/202516.jpg', 0)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/202595.jpg', 1)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/jack_r.jpg', 0)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/rose_r.jpg', 1)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/jt.jpg', 1)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/lc.jpg', 0)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/kate2.jpg', 1)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/mnls.jpg', 1)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/mbp.jpg', 0)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/fbb.jpg', 1)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/nc.jpg', 1)
+    
+    
+def test_trans(translator, discriminator, image_file_name, target_gender):
+    image = read_image(image_file_name)
+    image = np.expand_dims(image, axis = 0)
+    target_gender = np.expand_dims(target_gender, axis = 0)
+    translated_img = translator.predict([image, target_gender])
 
-gan = FaceGAN(learning_rate = 0.0001, generator_norm_func = BatchNormalization, discriminator_norm_func = InstanceNormalization)
+    r_src, _, r_cls = discriminator.predict(image)
+    g_src, _, g_cls = discriminator.predict(translated_img)
+    
+    plot_image(img_renorm(image), img_renorm(translated_img))
+    print('input: ' + str(r_src) + " , " + str(r_cls) + ' - translated: ' + str(g_src) + " , " + str(g_cls))
+   
+gan = FaceGAN(generator_norm_func = InstanceNormalization, discriminator_norm_func = InstanceNormalization)
 tf.logging.set_verbosity(tf.logging.ERROR)
-gan.train(epochs=_epochs)
+gan.train()
+
+test(gan.generator, gan.discriminator)
+
+'''
+translator = load_model('face_generator_epoch10-acc0.9577-g_cls0.6524-r_cls0.9797')
+discriminator = load_model('face_discriminator_epoch10-acc0.9577-g_cls0.6524-r_cls0.9797')
+test(translator, discriminator)
+'''
