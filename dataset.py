@@ -93,8 +93,10 @@ def augmentate(image, level = 'simple'):
         classifier,
         translator
 '''
-def load_celeba(data_dir, batch_size, prefetch_batch=1, num_threads=4, buffer_size=4096, part='train', consumer = 'vae', smallbatch = None):
-    if consumer == 'vae':
+def load_celeba(data_dir, batch_size, prefetch_batch=1, num_threads=4, buffer_size=4096, part='train', consumer = 'vae', smallbatch = None, full_dataset = False):
+    if full_dataset or smallbatch:
+        aug_level = None
+    elif consumer == 'vae':
         aug_level = 'simple'
     elif consumer == 'translator':
         aug_level = 'simple'
@@ -145,17 +147,18 @@ def load_celeba(data_dir, batch_size, prefetch_batch=1, num_threads=4, buffer_si
     # celebA files are shuffled already, don't shuffle here, reading the files consecutively may have better performance(because files may not be placed consecutively in the disk)
     # cache the files in memory to read disk only once, otherwise use TFRecord to speed up disk reading
     dataset = dataset.map(load_func, num_parallel_calls=num_threads)
-    if not smallbatch:
+    if not (smallbatch or full_dataset):
         dataset = dataset.cache()
         dataset = dataset.apply(tf.data.experimental.shuffle_and_repeat(buffer_size))
-    else:
+    elif not full_dataset:
         dataset = dataset.shuffle(img_num)
     
     # decode jpg and make the dataset from the cache
     def decode_and_preprocess_func(file, label=None):
         image = tf.image.decode_and_crop_jpeg(file, [29, 9, 160, 160])
         #image = tf.image.resize_images(image, [128, 128], tf.image.ResizeMethod.BICUBIC)
-        image = augmentate(image, level = aug_level)
+        if aug_level:
+            image = augmentate(image, level = aug_level)
                 
         image.set_shape((160, 160, 3))
         image = tf.cast(image, tf.float32)

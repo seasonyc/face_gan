@@ -15,8 +15,10 @@ def plot_image(input_images, rec_images, epoch = 0, save_image=True):
     for x, r in zip(input_images, rec_images):
         plt.subplot(1, 2, 1)
         plt.imshow(x)
+        plt.axis('off')
         plt.subplot(1, 2, 2)
         plt.imshow(r)
+        plt.axis('off')
         if save_image:
             plt.savefig('image_pair'+ str(epoch) + '_' + str(time.time()) + '.jpg')
         plt.show()
@@ -50,7 +52,7 @@ def load_index():
     print(index_t[0:20])
 
 
-def plot_images(images, save_image=True):
+def plot_images(images, save_image=True, show_image=True, filename = None):
     num = len(images)
     fig = plt.figure(figsize = (num*2.5,1*2.5))
     i = 1
@@ -60,8 +62,12 @@ def plot_images(images, save_image=True):
         plt.axis('off')
         i += 1
     if save_image:
-        plt.savefig('images'+ str(time.time()) + '.jpg')
-    plt.show()
+        if filename:
+            plt.savefig(filename + '.jpg')
+        else:
+            plt.savefig('images'+ str(time.time()) + '.jpg')
+    if show_image:
+        plt.show()
 
 def plot_image_list(imagelist, save_image=True):
     col = len(imagelist)

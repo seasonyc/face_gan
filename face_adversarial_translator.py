@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
 
-
-import sys
-
 import tensorflow as tf
 from tensorflow import keras
 
@@ -16,18 +13,17 @@ from tensorflow.keras.layers import Concatenate, RepeatVector, Reshape, Lambda
 from tensorflow.keras.models import Model
 from InstanceNormalization import InstanceNormalization
 from tensorflow.keras.losses import binary_crossentropy, mae
-from tensorflow.keras.regularizers import l2
 import dataset
 from utils import save_model, load_model, img_renorm, plot_image, plot_image_list, read_image, plot_images
 
 lambda_gp = 10
 lambda_rec = 10 #starGAN 10, attGAN 100
-lambda_cls_gen = 1 #starGAN 1, attGAN 10
+lambda_cls_gen = 1.2 #starGAN 1, attGAN 10
 lambda_cls_real = 1 #starGAN 1, attGAN 1
+lambda_g_w = 1.2 #starGAN 1, attGAN 1
 
 batch_size = 16
 learning_rate = 0.0001
-g_d_update_ratio = 1
 #lr_decay_ratio = 0.95
 epochs=10
 epochs_lr_start_decay = 10
@@ -186,8 +182,8 @@ class FaceGAN():
         self.generator_training_model.add_loss(generator_loss)
         '''
         
-        g_optimizer = keras.optimizers.Adam(lr=learning_rate * g_d_update_ratio, beta_1=0.5, epsilon=1e-08)
-        self.generator_training_model.compile(optimizer=g_optimizer, loss=[generator_wasserstein_loss, rec_loss, generater_cls_loss], loss_weights=[1, lambda_rec, lambda_cls_gen])
+        g_optimizer = keras.optimizers.Adam(lr=learning_rate, beta_1=0.5, epsilon=1e-08)
+        self.generator_training_model.compile(optimizer=g_optimizer, loss=[generator_wasserstein_loss, rec_loss, generater_cls_loss], loss_weights=[lambda_g_w, lambda_rec, lambda_cls_gen])
         self.generator_training_model.summary()
         
         
@@ -319,7 +315,7 @@ class FaceGAN():
 
         steps_per_epoch = train_size // batch_size
         self.lr_decay_value_d = learning_rate / (((epochs - epochs_lr_start_decay) * (steps_per_epoch // steps_4_log_and_lrupdate)) + 1)
-        self.lr_decay_value_g = learning_rate * g_d_update_ratio / (((epochs - epochs_lr_start_decay) * (steps_per_epoch // steps_4_log_and_lrupdate)) + 1)
+        self.lr_decay_value_g = learning_rate / (((epochs - epochs_lr_start_decay) * (steps_per_epoch // steps_4_log_and_lrupdate)) + 1)
         
         validation_steps = val_size // batch_size
         sess = K.get_session()
@@ -489,4 +485,29 @@ test(gan.generator, gan.discriminator)
 translator = load_model('face_generator_epoch10-acc0.9577-g_cls0.6524-r_cls0.9797')
 discriminator = load_model('face_discriminator_epoch10-acc0.9577-g_cls0.6524-r_cls0.9797')
 test(translator, discriminator)
+
+
+
+def trans_all(generator, discriminator, batch_size = 32):
+    for part in ('train', 'val', 'test'):
+        sess = K.get_session()
+        ds = dataset.load_celeba('CelebA', batch_size, part=part, consumer = 'translator', full_dataset = True)
+        next_element = ds.make_one_shot_iterator().get_next()
+        index = 0
+        while True:
+            try:
+                imgs, labels = sess.run(next_element)
+                labels = 1 - labels
+                rec_imgs = generator.predict([imgs, labels])
+                src_real, _, cls_real = discriminator.predict(imgs)
+                src_fake, _, cls_fake = discriminator.predict(rec_imgs)
+                for r, f, sr, cr, sf, cf in zip(imgs, rec_imgs, src_real, cls_real, src_fake, cls_fake):
+                    index += 1
+                    plot_images([img_renorm(r), img_renorm(f)], show_image=False, 
+                                filename = part + str(index) + '_real_' + str(sr) + '_cls_' + str(cr) + '_fake_' + str(sf) + '_cls_' + str(cf))
+            except tf.errors.OutOfRangeError:
+                break
+        
+
+trans_all(translator, discriminator)
 '''
