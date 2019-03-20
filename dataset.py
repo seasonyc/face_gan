@@ -93,7 +93,7 @@ def augmentate(image, level = 'simple'):
         classifier,
         translator
 '''
-def load_celeba(data_dir, batch_size, prefetch_batch=1, num_threads=4, buffer_size=4096, part='train', consumer = 'vae', smallbatch = None, full_dataset = False):
+def load_celeba(data_dir, batch_size, prefetch_batch=1, num_threads=4, buffer_size=4096, part='train', consumer = 'vae', smallbatch = None, full_dataset = False, all_labels = False):
     if full_dataset or smallbatch:
         aug_level = None
     elif consumer == 'vae':
@@ -113,7 +113,10 @@ def load_celeba(data_dir, batch_size, prefetch_batch=1, num_threads=4, buffer_si
     att_id = att_dict['Male'] + 1
     labels = None
     if consumer == 'classifier' or consumer == 'translator':
-        labels = np.loadtxt(list_file, skiprows=2, usecols=att_id, dtype=np.int8)    
+        if all_labels:
+            labels = np.loadtxt(list_file, skiprows=2, usecols=range(1, 41), dtype=np.int8)
+        else:
+            labels = np.loadtxt(list_file, skiprows=2, usecols=att_id, dtype=np.int8)    
     if part == 'test':
         img_paths = img_paths[182637:]
         if consumer == 'classifier' or consumer == 'translator':    
@@ -144,14 +147,18 @@ def load_celeba(data_dir, batch_size, prefetch_batch=1, num_threads=4, buffer_si
         dataset = tf.data.Dataset.from_tensor_slices((img_paths, labels))
     else:
         dataset = tf.data.Dataset.from_tensor_slices(img_paths)
-    # celebA files are shuffled already, don't shuffle here, reading the files consecutively may have better performance(because files may not be placed consecutively in the disk)
-    # cache the files in memory to read disk only once, otherwise use TFRecord to speed up disk reading
-    dataset = dataset.map(load_func, num_parallel_calls=num_threads)
-    if not (smallbatch or full_dataset):
+    
+    if smallbatch or full_dataset:
+        # shuffle for full_dataset too because would not translate all data
+        dataset = dataset.shuffle(img_num)
+        dataset = dataset.map(load_func, num_parallel_calls=num_threads)
+    else:
+        # celebA files are shuffled already, don't shuffle here, reading the files consecutively may have better performance(because files may not be placed consecutively in the disk)
+        # cache the files in memory to read disk only once, otherwise use TFRecord to speed up disk reading
+        dataset = dataset.map(load_func, num_parallel_calls=num_threads)
         dataset = dataset.cache()
         dataset = dataset.apply(tf.data.experimental.shuffle_and_repeat(buffer_size))
-    elif not full_dataset:
-        dataset = dataset.shuffle(img_num)
+    
     
     # decode jpg and make the dataset from the cache
     def decode_and_preprocess_func(file, label=None):

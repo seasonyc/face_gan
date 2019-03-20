@@ -18,14 +18,14 @@ from utils import save_model, load_model, img_renorm, plot_image, plot_image_lis
 
 lambda_gp = 10
 lambda_rec = 10 #starGAN 10, attGAN 100
-lambda_cls_gen = 1.2 #starGAN 1, attGAN 10
+lambda_cls_gen = 1 #starGAN 1, attGAN 10
 lambda_cls_real = 1 #starGAN 1, attGAN 1
-lambda_g_w = 1.2 #starGAN 1, attGAN 1
+lambda_g_w = 1 #starGAN 1, attGAN 1
 
 batch_size = 16
 learning_rate = 0.0001
 #lr_decay_ratio = 0.95
-epochs=10
+epochs=25
 epochs_lr_start_decay = 10
 steps_4_log_and_lrupdate = 100
 
@@ -213,7 +213,7 @@ class FaceGAN():
             print(K.int_shape(x))
         
         # residul
-        for i in range(6):
+        for i in range(9):
             x = self.res_block(x, channels, norm_func=self.generator_norm_func)
             print(K.int_shape(x))
         
@@ -410,11 +410,13 @@ class FaceGAN():
             print(log)
             
             # save model per epoch
-            save_model(self.generator, 'face_generator_epoch{:02d}-acc{:.4f}-g_cls{:.4f}-r_cls{:.4f}'.format(epoch+1, img_acc, gen_cls_acc, real_cls_acc) )
-            save_model(self.discriminator, 'face_discriminator_epoch{:02d}-acc{:.4f}-g_cls{:.4f}-r_cls{:.4f}'.format(epoch+1, img_acc, gen_cls_acc, real_cls_acc) )
-            
+            if epoch > epochs_lr_start_decay:
+                save_model(self.generator, 'face_generator_epoch{:02d}-acc{:.4f}-g_cls{:.4f}-r_cls{:.4f}'.format(epoch+1, img_acc, gen_cls_acc, real_cls_acc) )
+                save_model(self.discriminator, 'face_discriminator_epoch{:02d}-acc{:.4f}-g_cls{:.4f}-r_cls{:.4f}'.format(epoch+1, img_acc, gen_cls_acc, real_cls_acc) )
+                
             # test the model
-            self.test_gan(epoch)
+            if epoch == 5 or epoch == 15 or epoch == (epochs - 1):
+                self.test_gan(epoch)
 
             
                 
@@ -447,13 +449,40 @@ class FaceGAN():
                 
 
 def test(translator, discriminator):
-    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/trump.jpg', 0)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/201011.jpg', 0)
     test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/201207.jpg', 1)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/201278.jpg', 1)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/201790.jpg', 0)
     test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/202016.jpg', 0)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/202052.jpg', 0)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/202163.jpg', 0)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/202443.jpg', 0)
+    
     test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/202516.jpg', 0)
-    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/202595.jpg', 1)
-    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/jack_r.jpg', 0)
-    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/rose_r.jpg', 1)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/197684.jpg', 1)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/196973.jpg', 0)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/196730.jpg', 0)
+    
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/196580.jpg', 0)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/195721.jpg', 0)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/191631.jpg', 0)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/190224.jpg', 1)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/188531.jpg', 1)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/187745.jpg', 1)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/179153.jpg', 0)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/181741.jpg', 0)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/174617.jpg', 0)
+    
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/201242.jpg', 0)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/200396.jpg', 0)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/197898.jpg', 0)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/193926.jpg', 0)
+    
+    
+    
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/trump.jpg', 0)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/jack.jpg', 0)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/rose.jpg', 1)
     test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/jt.jpg', 1)
     test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/lc.jpg', 0)
     test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/kate2.jpg', 1)
@@ -461,6 +490,12 @@ def test(translator, discriminator):
     test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/mbp.jpg', 0)
     test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/fbb.jpg', 1)
     test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/nc.jpg', 1)
+
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/trump1.jpg', 0)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/trump2.jpg', 0)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/beckham.jpg', 0)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/wm1.jpg', 1)
+    test_trans(translator, discriminator, 'test_attr_trans_from_CelebA/hsk.jpg', 1)
     
     
 def test_trans(translator, discriminator, image_file_name, target_gender):
@@ -474,7 +509,9 @@ def test_trans(translator, discriminator, image_file_name, target_gender):
     
     plot_image(img_renorm(image), img_renorm(translated_img))
     print('input: ' + str(r_src) + " , " + str(r_cls) + ' - translated: ' + str(g_src) + " , " + str(g_cls))
-   
+ 
+
+''' 
 gan = FaceGAN(generator_norm_func = InstanceNormalization, discriminator_norm_func = InstanceNormalization)
 tf.logging.set_verbosity(tf.logging.ERROR)
 gan.train()
@@ -482,22 +519,25 @@ gan.train()
 test(gan.generator, gan.discriminator)
 
 '''
-translator = load_model('face_generator_epoch10-acc0.9577-g_cls0.6524-r_cls0.9797')
-discriminator = load_model('face_discriminator_epoch10-acc0.9577-g_cls0.6524-r_cls0.9797')
-test(translator, discriminator)
+translator = load_model('face_generator_epoch25-acc0.9652-g_cls0.9444-r_cls0.9831')
+discriminator = load_model('face_discriminator_epoch25-acc0.9652-g_cls0.9444-r_cls0.9831')
+#test(translator, discriminator)
 
 
 
-def trans_all(generator, discriminator, batch_size = 32):
-    for part in ('train', 'val', 'test'):
+
+
+
+def trans_all(generator, discriminator, batch_size = 16):
+    for part in ('test', 'val'):#('train', 'val', 'test'):
         sess = K.get_session()
-        ds = dataset.load_celeba('CelebA', batch_size, part=part, consumer = 'translator', full_dataset = True)
+        ds, _ = dataset.load_celeba('CelebA', batch_size, part=part, consumer = 'translator', full_dataset = True)
         next_element = ds.make_one_shot_iterator().get_next()
         index = 0
-        while True:
+        for i in range(20): # while True:
             try:
                 imgs, labels = sess.run(next_element)
-                labels = 1 - labels
+                # labels = 1 - labels
                 rec_imgs = generator.predict([imgs, labels])
                 src_real, _, cls_real = discriminator.predict(imgs)
                 src_fake, _, cls_fake = discriminator.predict(rec_imgs)
@@ -510,4 +550,4 @@ def trans_all(generator, discriminator, batch_size = 32):
         
 
 trans_all(translator, discriminator)
-'''
+
