@@ -125,40 +125,7 @@ class FaceGAN():
         # It's ok to output gen_img 
         # then don't need to set discriminator.trainable = False because then discriminator is not a part of model to be trained.
         self.generator_training_model = Model([input_img, orig_label, target_label], [rec_img, src_gen, cls_gen])
-        '''
-        from tensorflow.keras.models import model_from_json
-     
-        #facenet model structure: https://github.com/serengil/tensorflow-101/blob/master/model/facenet_model.json
-        facenet = model_from_json(open("model/facenet_model.json", "r").read())
-        #pre-trained weights https://drive.google.com/file/d/1971Xk5RwedbudGgTIrGAL4F7Aifu7id1/view?usp=sharing
-        facenet.load_weights('model/facenet_weights.h5')
-        facenet.trainable = False
-
-
-        def perceptual_loss(pm, selected_pm_layers, selected_pm_weights, input_img, rec_img):
-            outputs = [pm.get_layer(l).output for l in selected_pm_layers]
-            
-            model = Model(pm.input, outputs)
         
-            h1_list = model(input_img)
-            h2_list = model(rec_img)
-            weights = selected_pm_weights
-            if not isinstance(h1_list, list):
-                h1_list = [h1_list]
-                h2_list = [h2_list]
-                weights = [weights]
-                    
-            p_loss = 0.0
-            
-            for h1, h2, weight in zip(h1_list, h2_list, weights):
-                h1 = K.batch_flatten(h1)
-                h2 = K.batch_flatten(h2)
-                p_loss = p_loss + weight * K.mean(K.abs(h1 - h2), axis=-1)
-            
-            return p_loss
-
-
-        '''
         def rec_loss(dummy_true, dummy_pre):
             return K.mean(mae(K.batch_flatten(input_img), K.batch_flatten(rec_img)))
         
@@ -511,7 +478,7 @@ def test_trans(translator, discriminator, image_file_name, target_gender):
     print('input: ' + str(r_src) + " , " + str(r_cls) + ' - translated: ' + str(g_src) + " , " + str(g_cls))
  
 
-''' 
+
 gan = FaceGAN(generator_norm_func = InstanceNormalization, discriminator_norm_func = InstanceNormalization)
 tf.logging.set_verbosity(tf.logging.ERROR)
 gan.train()
@@ -534,10 +501,10 @@ def trans_all(generator, discriminator, batch_size = 16):
         ds, _ = dataset.load_celeba('CelebA', batch_size, part=part, consumer = 'translator', full_dataset = True)
         next_element = ds.make_one_shot_iterator().get_next()
         index = 0
-        for i in range(20): # while True:
+        while True: # for i in range(20):
             try:
                 imgs, labels = sess.run(next_element)
-                # labels = 1 - labels
+                labels = 1 - labels
                 rec_imgs = generator.predict([imgs, labels])
                 src_real, _, cls_real = discriminator.predict(imgs)
                 src_fake, _, cls_fake = discriminator.predict(rec_imgs)
@@ -550,4 +517,4 @@ def trans_all(generator, discriminator, batch_size = 16):
         
 
 trans_all(translator, discriminator)
-
+''' 
