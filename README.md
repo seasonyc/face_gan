@@ -2,6 +2,7 @@
 An adversarial translator for CelebA. It's similar to StarGAN except not star but single line :) There is no considerable tech difference with multiple attributes translation, but gender translation is most interesting so I just do it.
 
 Here are some result examples:
+
 ![1](https://github.com/seasonyc/face_gan/blob/master/pictures/image_pair0_1553074287.2175086.jpg)
 ![1](https://github.com/seasonyc/face_gan/blob/master/pictures/image_pair0_1553074289.4493124.jpg)
 ![1](https://github.com/seasonyc/face_gan/blob/master/pictures/image_pair0_1553074249.7120426.jpg)
@@ -18,6 +19,7 @@ Here are some result examples:
 ![1](https://github.com/seasonyc/face_gan/blob/master/pictures/v20855_real_[-25.562374]_cls_[0.9997322]_fake_[-32.25587]_cls_[0.00554323].jpg)
 ![1](https://github.com/seasonyc/face_gan/blob/master/pictures/v20973_real_[-23.889225]_cls_[0.9988399]_fake_[-30.70314]_cls_[0.000201].jpg)
 ![1](https://github.com/seasonyc/face_gan/blob/master/pictures/v20680_real_[-28.391115]_cls_[0.9996394]_fake_[-31.644875]_cls_[0.0160531].jpg)
+![1](https://github.com/seasonyc/face_gan/blob/master/pictures/test18718_real_[-26.061832]_cls_[0.9881544]_fake_[-31.084682]_cls_[0.00010141].jpg)
 
 More examples are in pictures directory.
 
